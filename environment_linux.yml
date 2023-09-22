@@ -25,8 +25,7 @@ dependencies:
   - seaborn
   - altair
   - loguru
-  - tqdm
-  - grpcio # used in `modin`, using conda for (Apple Silicon) Support
+  - tqdmpip
   - pip
   - pip:
     - modin
@@ -39,5 +38,3 @@ dependencies:
     - polars
     - pyspedas @ git+https://github.com/spedas/pyspedas
     - xarray-einstats
-    - rpy2
-    - rpy2-arrow

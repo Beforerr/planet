@@ -40,7 +40,7 @@ import pytplot
 from pytplot import timebar, store_data, tplot, split_vec, join_vec, tplot_options, options, highlight, degap
 
 import pdpipe as pdp
-
+from multipledispatch import dispatch
 
 from collections.abc import Callable
 from pandas import (
@@ -628,13 +628,12 @@ class IDsPipeline:
 
 # %% ../nbs/00_ids_finder.ipynb 37
 def process_candidates(
-    candidates_pl: pl.DataFrame, 
+    candidates: pl.DataFrame, 
     sat_fgm: xr.DataArray, 
     sat_state: xr.DataArray,
     data_resolution: timedelta
 ):
     
-    candidates = convert_to_dataframe(candidates_pl)
     id_pipelines = IDsPipeline()
 
     candidates = id_pipelines.calc_duration(sat_fgm).apply(candidates)
