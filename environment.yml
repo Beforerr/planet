@@ -1,0 +1,91 @@
+# mamba env create --file environment.yml
+# mamba env update --file environment.yml
+# conda activate cool_planet
+name: cool_planet
+channels:
+  - conda-forge
+dependencies:
+  - pdr # [P]lanetary [D]ata [R]eader - A single function to read all Planetary Data System (PDS) data into Python
+  - pandas
+  - pdpipe
+  
+  - xarray
+  - dask
+  # For accelerating xarray
+  - scipy
+  - bottleneck
+  - numbagg
+  - flox # fast & furious GroupBy reductions for xarray and dask
+  
+  - sunpy
+  - astropy
+  - nbdev
+  - jupyter
+  - bokeh<3 # pytplot compatibility
+  - seaborn
+  - altair
+  - loguru
+  - tqdm
+  - grpcio # used in `modin`, using conda for (Apple Silicon) Support
+  - pip
+  - pip:
+    - modin
+    - swifter # efficiently applies any function to a pandas dataframe or series in the fastest available manner
+    - speasy # Python client for Space Physics web services such as CDAWEB or AMDA.
+    - pycdfpp # fast CDF reader
+    # - modin[all] # drop-in replacement for pandas
+    - multipledispatch
+    - vegafusion[embed]
+    - polars
+    - pyspedas @ git+https://github.com/spedas/pyspedas
+    - xarray-einstats
+    - rpy2
+    - rpy2-arrow
+
+
+
+
+# mamba env create --file environment.yml
+# mamba env update --file environment.yml
+# conda activate cool_planet
+# name: cool_planet
+# channels:
+#   - conda-forge
+# dependencies:
+#   - pdr # [P]lanetary [D]ata [R]eader - A single function to read all Planetary Data System (PDS) data into Python
+#   - pandas
+#   - modin
+#   - swifter # efficiently applies any function to a pandas dataframe or series in the fastest available manner
+#   - pdpipe
+  
+#   - xarray
+#   - dask
+#   # For accelerating xarray
+#   - scipy
+#   - bottleneck
+#   - numbagg
+#   - flox # fast & furious GroupBy reductions for xarray and dask
+  
+#   - sunpy
+#   - astropy
+#   - jupyter
+#   - bokeh<3 # pytplot compatibility
+#   - seaborn
+#   - altair
+#   - loguru
+#   - tqdm
+#   - pip
+#   - grpcio # used in `modin`, using conda for (Apple Silicon) Support
+#   - pytables # used in `pyspedas`, using pip to install fails on python3.9
+#   - pip:
+#     - 'pandas<2'
+#     - speasy # Python client for Space Physics web services such as CDAWEB or AMDA.
+#     - pycdfpp # fast CDF reader
+#     # - modin[all] # drop-in replacement for pandas
+#     - multipledispatch
+#     - vegafusion[embed]
+#     - polars
+#     - pyspedas @ git+https://github.com/spedas/pyspedas
+#     - xarray-einstats
+#     - rpy2
+#     - rpy2-arrow

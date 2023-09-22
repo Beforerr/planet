@@ -1,0 +1,9 @@
+project:
+  output-dir: _docs
+
+website:
+  title: "planet"
+  site-url: "https://Beforerr.github.io/planet"
+  description: "Hello planet"
+  repo-branch: main
+  repo-url: "https://github.com/Beforerr/planet"

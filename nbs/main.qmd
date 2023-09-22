@@ -1,0 +1,83 @@
+---
+title: "Untitled"
+format: html
+---
+
+```{r}
+library(ggplot2)
+library(arrow)
+```
+
+## Loading data
+
+load candidates data from parquet file
+
+```{r}
+candidates <- read_parquet("candidates_2016_2017.parquet")
+summary(candidates)
+```
+
+## Overview of the data
+
+```{r}
+ggplot(candidates, aes(time, X)) + 
+  geom_point()
+```
+
+```{r}
+# Base plot with time on the x-axis
+ggplot(candidates, aes(x = time)) + 
+  geom_freqpoly() + # Overall frequency polygon
+  geom_freqpoly(aes(color = type)) # Frequency polygons split by type
+```
+
+```{r}
+candidates$date_only <- as.Date(candidates$time)
+p <- ggplot(candidates, aes(x = date_only)) + 
+  geom_freqpoly(binwidth = 1) + # Overall frequency by day
+  geom_freqpoly(aes(color = type), binwidth = 1) + # Frequency by day split by type
+  labs(x = "Date")
+print(p)
+```
+
+### Occurrence rates with distance
+
+```{r}
+ggplot(candidates, aes(X, color = type)) +
+  geom_freqpoly()
+```
+
+```         
+```
+
+### Occurrence rate in time with distance
+
+Plot the occurence of different candidate types changing with time
+
+### Relative occurrence ratio
+
+```{r}
+ggplot(candidates, aes(X)) + 
+  geom_histogram(aes(fill = type), position = "fill")
+```
+
+```{r}
+ggplot(candidates, aes(X, after_stat(count), fill = type)) +
+  geom_density(position = "fill")
+```
+
+### Density
+
+```{r}
+ggplot(candidates, aes(X, after_stat(density), colour = type)) +
+  geom_freqpoly()
+```
+
+```{r}
+ggplot(candidates, aes(X, colour = type)) +
+  geom_density()
+```
+
+```{python}
+import altair as alt
+```
