@@ -48,7 +48,7 @@ from pandas import (
 )
 from xarray.core.dataarray import DataArray
 
-# %% ../nbs/00_ids_finder.ipynb 11
+# %% ../nbs/00_ids_finder.ipynb 10
 @dispatch(object, xr.DataArray)
 def get_candidate_data(candidate, data, coord:str=None, neighbor:int=0) -> xr.DataArray:
     duration = candidate['tstop'] - candidate['tstart']
@@ -90,11 +90,11 @@ def get_candidates(candidates: DataFrame, candidate_type=None, num:int=4):
     else:
         return _candidates
 
-# %% ../nbs/00_ids_finder.ipynb 13
+# %% ../nbs/00_ids_finder.ipynb 12
 from pyspedas.cotrans import minvar_matrix_make
 from pyspedas import tvector_rotate
 
-# %% ../nbs/00_ids_finder.ipynb 14
+# %% ../nbs/00_ids_finder.ipynb 13
 def plot_basic(
     data, tstart, tstop, tau, mva_tstart=None, mva_tstop=None, neighbor: int = 1
 ):
@@ -195,7 +195,7 @@ def plot_candidates(
     for _, candidate in candidates.iterrows():
         plot_func(candidate)
 
-# %% ../nbs/00_ids_finder.ipynb 18
+# %% ../nbs/00_ids_finder.ipynb 17
 THRESHOLD_RATIO  = 1/4
 
 from typing import Tuple
@@ -267,7 +267,7 @@ def get_time_from_condition(vec: xr.DataArray, threshold, condition_type) -> pd.
         return vec.time[where_result[index_choice]].values
     return None
 
-# %% ../nbs/00_ids_finder.ipynb 19
+# %% ../nbs/00_ids_finder.ipynb 18
 def calc_candidate_duration(candidate: pd.Series, data) -> pd.Series:
     try:
         candidate_data = get_candidate_data(candidate, data)
@@ -294,7 +294,7 @@ def calc_candidate_d_duration(candidate, data) -> pd.Series:
         print(f"Error for candidate {candidate} at {candidate['time']}: {str(e)}")
         raise e
 
-# %% ../nbs/00_ids_finder.ipynb 20
+# %% ../nbs/00_ids_finder.ipynb 19
 def calibrate_candidate_duration(
     candidate: pd.Series, data:xr.DataArray, data_resolution, ratio = 3/4
 ):
@@ -344,7 +344,7 @@ def calibrate_candidate_duration(
         'd_tstop': d_tstop,
     })
 
-# %% ../nbs/00_ids_finder.ipynb 23
+# %% ../nbs/00_ids_finder.ipynb 22
 BnOverB_RD_lower_threshold = 0.4
 dBOverB_RD_upper_threshold = 0.2
 
@@ -358,10 +358,10 @@ BnOverB_ND_lower_threshold = BnOverB_TD_upper_threshold
 dBOverB_ND_lower_threshold = dBOverB_RD_upper_threshold
 
 
-# %% ../nbs/00_ids_finder.ipynb 24
+# %% ../nbs/00_ids_finder.ipynb 23
 from pyspedas.cotrans.minvar import minvar
 
-# %% ../nbs/00_ids_finder.ipynb 25
+# %% ../nbs/00_ids_finder.ipynb 24
 def calc_classification_index(data: xr.DataArray):
     
     vrot, v, w = minvar(data.to_numpy()) # NOTE: using `.to_numpy()` will significantly speed up the computation.
@@ -398,7 +398,7 @@ def calc_classification_index(data: xr.DataArray):
         'dBOverB_max': dBOverB_max.item(),
         })
 
-# %% ../nbs/00_ids_finder.ipynb 26
+# %% ../nbs/00_ids_finder.ipynb 25
 def classify_id(BnOverB, dBOverB):
     BnOverB = np.abs(np.asarray(BnOverB))
     dBOverB = np.asarray(dBOverB)
@@ -424,7 +424,7 @@ def classify_id(BnOverB, dBOverB):
     return result
 
 
-# %% ../nbs/00_ids_finder.ipynb 28
+# %% ../nbs/00_ids_finder.ipynb 27
 def calc_rotation_angle(v1, v2):
     """
     Computes the rotation angle between two vectors.
@@ -480,11 +480,11 @@ def calc_candidate_rotation_angle(candidates, data:  xr.DataArray):
     rotation_angles = calc_rotation_angle(vecs_before, vecs_after)
     return rotation_angles
 
-# %% ../nbs/00_ids_finder.ipynb 30
+# %% ../nbs/00_ids_finder.ipynb 29
 def get_candidate_location(candidate, location_data: DataArray):
     return location_data.sel(time = candidate['d_time']).to_series()
 
-# %% ../nbs/00_ids_finder.ipynb 32
+# %% ../nbs/00_ids_finder.ipynb 31
 def get_ID_filter_condition(
     index_std_threshold = 2,
     index_fluc_threshold = 1,
@@ -505,10 +505,10 @@ def get_ID_filter_condition(
 
 
 
-# %% ../nbs/00_ids_finder.ipynb 33
+# %% ../nbs/00_ids_finder.ipynb 32
 from pdpipe.util import out_of_place_col_insert
 
-# %% ../nbs/00_ids_finder.ipynb 34
+# %% ../nbs/00_ids_finder.ipynb 33
 #| code-summary: patch `pdp.ApplyToRows` to work with `modin` DataFrames
 @patch
 def _transform(self: pdp.ApplyToRows, X, verbose):
@@ -544,13 +544,13 @@ def _transform(self: pdp.ApplyToRows, X, verbose):
         " Only Series and DataFrame are allowed."
     )
 
-# %% ../nbs/00_ids_finder.ipynb 35
+# %% ../nbs/00_ids_finder.ipynb 34
 def calc_candidate_classification_index(candidate, data):
     return calc_classification_index(
         data.sel(time=slice(candidate["d_tstart"], candidate["d_tstop"]))
     )
 
-# %% ../nbs/00_ids_finder.ipynb 36
+# %% ../nbs/00_ids_finder.ipynb 35
 def convert_to_dataframe(
     data: pl.DataFrame, # orignal Dataframe
 ):
@@ -563,7 +563,7 @@ def convert_to_dataframe(
         data = pd.DataFrame(data)
     return data
 
-# %% ../nbs/00_ids_finder.ipynb 37
+# %% ../nbs/00_ids_finder.ipynb 36
 #| code-summary: Pipelines Class for processing IDs
 class IDsPipeline:
     def __init__(self):
@@ -618,7 +618,7 @@ class IDsPipeline:
     # fmt: on
     # ... you can add more methods as needed
 
-# %% ../nbs/00_ids_finder.ipynb 38
+# %% ../nbs/00_ids_finder.ipynb 37
 def process_candidates(
     candidates: pl.DataFrame,
     sat_fgm: xr.DataArray,

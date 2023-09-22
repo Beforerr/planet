@@ -3,8 +3,7 @@
 # %% auto 0
 __all__ = ['download_file', 'check_fgm', 'col_renamer', 'df2ts', 'sat_get_fgm_from_df', 'juno_get_state', 'calc_vec_mag',
            'calc_vec_mean_mag', 'calc_vec_std', 'calc_vec_relative_diff', 'pl_format_time', 'pl_norm', 'pl_dvec',
-           'compute_std', 'compute_combinded_std', 'compute_index_std', 'calc_combined_std', 'compute_index_diff',
-           'compute_indices']
+           'compute_std', 'compute_combinded_std', 'compute_index_std', 'compute_index_diff', 'compute_indices']
 
 # %% ../nbs/100_utils.ipynb 1
 import os
@@ -178,6 +177,8 @@ def pl_dvec(columns, *more_columns):
     ]
 
 
+
+# %% ../nbs/100_utils.ipynb 4
 def compute_std(df: pl.DataFrame, tau) -> pl.DataFrame:
     b_cols = ["BX", "BY", "BZ"]
     b_std_cols = [col_name + "_std" for col_name in b_cols]
@@ -234,7 +235,7 @@ def compute_combinded_std(df: pl.DataFrame, tau) -> pl.DataFrame:
     combined_std_df = pl.concat(combined_std_dfs)
     return combined_std_df
 
-
+# %% ../nbs/100_utils.ipynb 5
 @dispatch(xr.DataArray, object)
 def compute_index_std(data: DataArray, tau):
     """
@@ -319,22 +320,7 @@ def compute_index_std(df: pl.LazyFrame, tau, join_strategy="inner"):  # noqa: F8
     )
     return index_std_df
 
-# TEST: compare the two implementations of the standard deviation index
-
-# i1 = index_std(juno_fgm_b, tau)
-# i1.sel(time=slice(trange[0],None))
-# index_std_df = compute_index_std_pl(df, tau)
-# index_std_df
-
-# Helper function to calculate combined standard deviation
-def calc_combined_std(col_name):
-    return (
-        pl.concat_list([pl.col(col_name).shift(-2), pl.col(col_name).shift(2)])
-        .list.eval(pl.element().std())
-        .flatten()
-        .alias(f"{col_name}_combined_std")
-    )
-
+# %% ../nbs/100_utils.ipynb 6
 def compute_index_diff(df, tau):
     b_cols = ["BX", "BY", "BZ"]
     db_cols = ["d" + col_name + "_vec" for col_name in b_cols]
