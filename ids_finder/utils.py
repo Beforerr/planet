@@ -3,8 +3,8 @@
 # %% auto 0
 __all__ = ['download_file', 'check_fgm', 'col_renamer', 'df2ts', 'sat_get_fgm_from_df', 'juno_get_state', 'calc_vec_mag',
            'calc_vec_mean_mag', 'calc_vec_std', 'calc_vec_relative_diff', 'pl_format_time', 'pl_norm', 'pl_dvec',
-           'compute_std', 'compute_combinded_std', 'compute_index_std', 'calc_combined_std',
-           'compute_index_fluctuation_xr', 'compute_index_fluctuation', 'compute_index_diff', 'compute_indices']
+           'compute_std', 'compute_combinded_std', 'compute_index_std', 'calc_combined_std', 'compute_index_diff',
+           'compute_indices']
 
 # %% ../nbs/100_utils.ipynb 1
 import os
@@ -16,7 +16,6 @@ import xarray as xr
 import pandas
 import numpy as np
 from xarray_einstats import linalg
-from flox.xarray import xarray_reduce
 
 from datetime import timedelta
 
@@ -70,8 +69,6 @@ def col_renamer(lbl: str):
     if lbl.startswith("BZ"):
         return "BZ"
     return lbl
-
-    
 
 
 def df2ts(
@@ -337,194 +334,6 @@ def calc_combined_std(col_name):
         .flatten()
         .alias(f"{col_name}_combined_std")
     )
-
-
-def _compute_index_fluctuation_old(df: pl.DataFrame, tau) -> pl.DataFrame:
-    """
-    Compute the fluctuation index based on the given DataFrame, and tau value.
-
-    Parameters:
-    - df (pl.DataFrame): The input DataFrame.
-    - tau (int): The time interval value.
-
-    Returns:
-    - pl.DataFrame: DataFrame with calculated 'index_fluctuation' column.
-
-    Examples
-    --------
-    >>> result_df = compute_index_fluctuation(df, tau)
-    """
-    if isinstance(tau, (int, float)):
-        tau = timedelta(seconds=tau)
-
-    # Group and compute standard deviations
-    group_df = (
-        df.group_by_dynamic("time", every=tau / 2, period=tau)
-        .agg(
-            pl.col(["BX", "BY", "BZ"]),
-            pl.col("BX").std().alias("BX_std"),
-            pl.col("BY").std().alias("BY_std"),
-            pl.col("BZ").std().alias("BZ_std"),
-        )
-        .with_columns(
-            pl_norm("BX_std", "BY_std", "BZ_std").alias("B_std"),
-        )
-        .drop("BX_std", "BY_std", "BZ_std")
-    )
-
-    # Compute fluctuation index
-    index_fluctuation_df = (
-        group_df.with_columns(
-            calc_combined_std("BX"),
-            calc_combined_std("BY"),
-            calc_combined_std("BZ"),
-        )
-        .drop("BX", "BY", "BZ")
-        .with_columns(
-            pl_norm("BX_combined_std", "BY_combined_std", "BZ_combined_std").alias(
-                "B_combined_std"
-            ),
-            pl.sum_horizontal(
-                pl.col("B_std").shift(-2), pl.col("B_std").shift(2)
-            ).alias("B_added_std"),
-        )
-        .drop("BX_combined_std", "BY_combined_std", "BZ_combined_std")
-        .with_columns(
-            (pl.col("B_combined_std") / pl.col("B_added_std")).alias(
-                "index_fluctuation"
-            ),
-        )
-    )
-
-    return index_fluctuation_df
-
-    # NOTE: the following code is about 2x slower than the above code
-    # group_df.with_columns(
-    #     pl.concat_list([pl.col("BX_group").shift(-2), pl.col("BX_group").shift(2)]),
-    # ).explode("BX_group").sort("time").group_by("time").agg(
-    #     pl.col("BX_group").std().alias("BX_combined_std"),
-    # )
-
-    # NOTE: the following code is about 2x slower than the above code
-    # pl.concat(
-    #     [
-    #         group_df.with_columns(pl.col("BX_group").shift(-2)).explode("BX_group"),
-    #         group_df.with_columns(pl.col("BX_group").shift(2)).explode("BX_group"),
-    #     ]
-    # ).sort("time").group_by("time").agg(
-    #     pl.col("BX_group").std().alias("BX_combined_std"),
-    # )
-
-
-def compute_index_fluctuation_xr(data: xr.DataArray, tau: int) -> xr.DataArray:
-    """
-    Computes the fluctuation index for a given data array based on a specified time interval.
-
-    Parameters:
-    - data: The xarray DataArray containing the data to be processed.
-    - tau: Time interval in seconds for resampling.
-
-    Returns:
-    - fluctuation: xarray DataArray containing the fluctuation indices.
-
-    Notes
-    -----
-        ddof=0 is used for calculating the standard deviation. (ddof=1 is for sample standard deviation)
-    """
-
-    # Resample the data based on the provided time interval.
-    grouped_data = data.resample(time=pandas.Timedelta(tau, unit="s"))
-
-    # Pre-compute the standard deviation for all groups
-    vec_stds = linalg.norm(grouped_data.std(dim="time"), dims="v_dim")
-
-    # Assign coordinates for pre and next groups based on time offset
-    offset = pandas.Timedelta(tau, unit="s")
-    pre_stds = vec_stds.assign_coords({"time": vec_stds["time"] - offset})
-    next_stds = vec_stds.assign_coords({"time": vec_stds["time"] + offset})
-
-    # Offset the keys of the group dictionary to get previous and next groups
-    groups_dict = grouped_data.groups
-
-    # Create DataArrays for previous and next time labels using the slices from the groups dictionaries
-    prev_labels = xr.concat(
-        [
-            xr.DataArray(
-                key + offset,
-                dims=["time"],
-                coords={"time": data.time[slice]},
-                name="time",
-            )
-            for key, slice in groups_dict.items()
-        ],
-        dim="time",
-    )
-    next_labels = xr.concat(
-        [
-            xr.DataArray(
-                key - offset,
-                dims=["time"],
-                coords={"time": data.time[slice]},
-                name="time",
-            )
-            for key, slice in groups_dict.items()
-        ],
-        dim="time",
-    )
-
-    # Concatenate the previous and next labels into a single DataArray
-    labels = xr.concat([prev_labels, next_labels], dim="y")
-
-    # Compute the combined standard deviation for the data using the labels
-    combined_stds = linalg.norm(xarray_reduce(data, labels, func="std"), dims="v_dim")
-
-    # Calculate the fluctuation index
-    fluctuation = combined_stds / (pre_stds + next_stds)
-    fluctuation["time"] = fluctuation["time"] + pandas.Timedelta(tau / 2, unit="s")
-
-    return fluctuation
-
-
-# NOTE: the two implementation of computing the fluctuation are equivalent, but the following one is about a little bit slower.
-def _compute_index_fluctuation_xr(data: xr.DataArray, tau):
-    # Resample the data based on the provided time interval.
-    grouped_data = data.resample(time=pandas.Timedelta(tau, unit="s"))
-
-    # Pre-compute std for all groups
-    vec_stds = linalg.norm(grouped_data.std(dim="time"), dims="v_dim")
-
-    fluctuation_values = []
-    group_keys = list(grouped_data.groups.keys())
-
-    # Iterate over the groups, skipping the first and the last one.
-    for i in range(1, len(group_keys) - 1):
-        prev_std = vec_stds[i - 1]
-        next_std = vec_stds[i + 1]
-
-        prev_group_indices = grouped_data.groups[group_keys[i - 1]]
-        next_group_indices = grouped_data.groups[group_keys[i + 1]]
-        prev_group = data[prev_group_indices]
-        next_group = data[next_group_indices]
-
-        combined_group = xr.concat([prev_group, next_group], dim="time")
-        combined_std = calc_vec_std(combined_group)
-
-        fluctuation = combined_std / (prev_std + next_std)
-        fluctuation_values.append(fluctuation)
-    return DataArray(fluctuation_values, dims=["time"])
-
-
-def compute_index_fluctuation(data, tau):
-    """helper function to compute fluctuation index
-
-    Notes: the results returned are a little bit different for the two implementations (because of the implementation of `std`).
-    """
-
-    if isinstance(data, pl.DataFrame):
-        return _compute_index_fluctuation_old(data, tau)
-    if isinstance(data, xr.DataArray):
-        return compute_index_fluctuation_xr(data, tau)
-
 
 def compute_index_diff(df, tau):
     b_cols = ["BX", "BY", "BZ"]
