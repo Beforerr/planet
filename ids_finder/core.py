@@ -3,13 +3,12 @@
 # %% auto 0
 __all__ = ['THRESHOLD_RATIO', 'BnOverB_RD_lower_threshold', 'dBOverB_RD_upper_threshold', 'BnOverB_TD_upper_threshold',
            'dBOverB_TD_lower_threshold', 'BnOverB_ED_upper_threshold', 'dBOverB_ED_upper_threshold',
-           'BnOverB_ND_lower_threshold', 'dBOverB_ND_lower_threshold', 'get_candidate_data_xr', 'get_candidate_data_pl',
-           'get_candidate_data', 'get_candidates', 'plot_basic', 'format_candidate_title', 'plot_candidate',
-           'plot_candidates', 'calc_duration', 'calc_d_duration', 'find_start_end_times', 'get_time_from_condition',
-           'calc_candidate_duration', 'calc_candidate_d_duration', 'calibrate_candidate_duration',
-           'calc_classification_index', 'classify_id', 'calc_rotation_angle', 'calc_candidate_rotation_angle',
-           'get_candidate_location', 'get_ID_filter_condition', 'calc_candidate_classification_index',
-           'convert_to_dataframe', 'IDsPipeline', 'process_candidates']
+           'BnOverB_ND_lower_threshold', 'dBOverB_ND_lower_threshold', 'get_candidate_data', 'get_candidates',
+           'plot_basic', 'format_candidate_title', 'plot_candidate', 'plot_candidates', 'calc_duration',
+           'calc_d_duration', 'find_start_end_times', 'get_time_from_condition', 'calc_candidate_duration',
+           'calc_candidate_d_duration', 'calibrate_candidate_duration', 'calc_classification_index', 'classify_id',
+           'calc_rotation_angle', 'calc_candidate_rotation_angle', 'get_candidate_location', 'get_ID_filter_condition',
+           'calc_candidate_classification_index', 'convert_to_dataframe', 'IDsPipeline', 'process_candidates']
 
 # %% ../nbs/00_ids_finder.ipynb 3
 #| code-summary: import all the packages needed for the project
@@ -49,9 +48,9 @@ from pandas import (
 )
 from xarray.core.dataarray import DataArray
 
-# %% ../nbs/00_ids_finder.ipynb 12
+# %% ../nbs/00_ids_finder.ipynb 11
 @dispatch(object, xr.DataArray)
-def get_candidate_data_xr(candidate, data, coord:str=None, neighbor:int=0) -> xr.DataArray:
+def get_candidate_data(candidate, data, coord:str=None, neighbor:int=0) -> xr.DataArray:
     duration = candidate['tstop'] - candidate['tstart']
     offset = neighbor*duration
     temp_tstart = candidate['tstart'] - offset
@@ -60,7 +59,7 @@ def get_candidate_data_xr(candidate, data, coord:str=None, neighbor:int=0) -> xr
     return data.sel(time=slice(temp_tstart,  temp_tstop))
 
 @dispatch(object, pl.DataFrame)
-def get_candidate_data_pl(candidate, data, coord:str=None, neighbor:int=0) -> xr.DataArray:
+def get_candidate_data(candidate, data, coord:str=None, neighbor:int=0) -> xr.DataArray:
     """
     Notes
     -----
@@ -75,18 +74,7 @@ def get_candidate_data_pl(candidate, data, coord:str=None, neighbor:int=0) -> xr
         pl.col("time").is_between(temp_tstart, temp_tstop)
     )
     
-    dims = ["v_dim", "time"]
-    coords = {
-        "time": temp_data['time'], 
-        "v_dim": ["BX", "BY", "BZ"]
-        }
-    return xr.DataArray([ temp_data['BX'], temp_data['BY'], temp_data['BZ']], dims=dims, coords=coords)
-
-def get_candidate_data(candidate, data, coord:str=None, neighbor:int=0) -> xr.DataArray:
-    if isinstance(data, xr.DataArray):
-        return get_candidate_data_xr(candidate, data, coord=coord, neighbor=neighbor)
-    elif isinstance(data, pl.DataFrame):    
-        return get_candidate_data_pl(candidate, data, coord=coord, neighbor=neighbor)
+    return df2ts(temp_data, ["BX", "BY", "BZ"], attrs={"coordinate_system": coord, "units": "nT"})
 
 def get_candidates(candidates: DataFrame, candidate_type=None, num:int=4):
     
@@ -229,13 +217,16 @@ def calc_duration(vec: xr.DataArray, threshold_ratio=THRESHOLD_RATIO) -> pandas.
 
     start_time, end_time = find_start_end_times(vec_diff_mag, d_time, threshold)
 
-    return pandas.Series({
+    dict = {
         'd_star': d_star.item(),
         'd_time': d_time.values,
         'threshold': threshold.item(),
         'd_tstart': start_time,
         'd_tstop': end_time,
-    })
+    }
+
+    return dict
+    # return pandas.Series(dict)
 
 def calc_d_duration(vec: xr.DataArray, d_time, threshold) -> pd.Series:
     vec_diff = vec.differentiate("time", datetime_unit="s")
@@ -277,19 +268,19 @@ def get_time_from_condition(vec: xr.DataArray, threshold, condition_type) -> pd.
     return None
 
 # %% ../nbs/00_ids_finder.ipynb 19
-def calc_candidate_duration(candidate: pd.Series, data, get_candidate_data_fn:Callable =get_candidate_data_xr) -> pd.Series:
+def calc_candidate_duration(candidate: pd.Series, data) -> pd.Series:
     try:
-        candidate_data = get_candidate_data_fn(candidate, data)
+        candidate_data = get_candidate_data(candidate, data)
         return calc_duration(candidate_data)
     except Exception as e:
         # logger.debug(f"Error for candidate {candidate} at {candidate['time']}: {str(e)}") # can not be serialized
         print(f"Error for candidate {candidate} at {candidate['time']}: {str(e)}")
         raise e
 
-def calc_candidate_d_duration(candidate, data , get_candidate_data_fn:Callable =get_candidate_data) -> pd.Series:
+def calc_candidate_d_duration(candidate, data) -> pd.Series:
     try:
         if pd.isnull(candidate['d_tstart']) or pd.isnull(candidate['d_tstop']):
-            candidate_data = get_candidate_data_fn(candidate, data, neighbor=1)
+            candidate_data = get_candidate_data(candidate, data, neighbor=1)
             d_time = candidate['d_time']
             threshold = candidate['threshold']
             return calc_d_duration(candidate_data, d_time, threshold)
@@ -303,6 +294,7 @@ def calc_candidate_d_duration(candidate, data , get_candidate_data_fn:Callable =
         print(f"Error for candidate {candidate} at {candidate['time']}: {str(e)}")
         raise e
 
+# %% ../nbs/00_ids_finder.ipynb 20
 def calibrate_candidate_duration(
     candidate: pd.Series, data:xr.DataArray, data_resolution, ratio = 3/4
 ):
@@ -352,7 +344,7 @@ def calibrate_candidate_duration(
         'd_tstop': d_tstop,
     })
 
-# %% ../nbs/00_ids_finder.ipynb 22
+# %% ../nbs/00_ids_finder.ipynb 23
 BnOverB_RD_lower_threshold = 0.4
 dBOverB_RD_upper_threshold = 0.2
 
@@ -366,10 +358,10 @@ BnOverB_ND_lower_threshold = BnOverB_TD_upper_threshold
 dBOverB_ND_lower_threshold = dBOverB_RD_upper_threshold
 
 
-# %% ../nbs/00_ids_finder.ipynb 23
+# %% ../nbs/00_ids_finder.ipynb 24
 from pyspedas.cotrans.minvar import minvar
 
-# %% ../nbs/00_ids_finder.ipynb 24
+# %% ../nbs/00_ids_finder.ipynb 25
 def calc_classification_index(data: xr.DataArray):
     
     vrot, v, w = minvar(data.to_numpy()) # NOTE: using `.to_numpy()` will significantly speed up the computation.
@@ -406,7 +398,7 @@ def calc_classification_index(data: xr.DataArray):
         'dBOverB_max': dBOverB_max.item(),
         })
 
-# %% ../nbs/00_ids_finder.ipynb 25
+# %% ../nbs/00_ids_finder.ipynb 26
 def classify_id(BnOverB, dBOverB):
     BnOverB = np.abs(np.asarray(BnOverB))
     dBOverB = np.asarray(dBOverB)
@@ -432,7 +424,7 @@ def classify_id(BnOverB, dBOverB):
     return result
 
 
-# %% ../nbs/00_ids_finder.ipynb 27
+# %% ../nbs/00_ids_finder.ipynb 28
 def calc_rotation_angle(v1, v2):
     """
     Computes the rotation angle between two vectors.
@@ -488,11 +480,11 @@ def calc_candidate_rotation_angle(candidates, data:  xr.DataArray):
     rotation_angles = calc_rotation_angle(vecs_before, vecs_after)
     return rotation_angles
 
-# %% ../nbs/00_ids_finder.ipynb 29
+# %% ../nbs/00_ids_finder.ipynb 30
 def get_candidate_location(candidate, location_data: DataArray):
     return location_data.sel(time = candidate['d_time']).to_series()
 
-# %% ../nbs/00_ids_finder.ipynb 31
+# %% ../nbs/00_ids_finder.ipynb 32
 def get_ID_filter_condition(
     index_std_threshold = 2,
     index_fluc_threshold = 1,
@@ -513,10 +505,10 @@ def get_ID_filter_condition(
 
 
 
-# %% ../nbs/00_ids_finder.ipynb 32
+# %% ../nbs/00_ids_finder.ipynb 33
 from pdpipe.util import out_of_place_col_insert
 
-# %% ../nbs/00_ids_finder.ipynb 33
+# %% ../nbs/00_ids_finder.ipynb 34
 #| code-summary: patch `pdp.ApplyToRows` to work with `modin` DataFrames
 @patch
 def _transform(self: pdp.ApplyToRows, X, verbose):
@@ -552,13 +544,13 @@ def _transform(self: pdp.ApplyToRows, X, verbose):
         " Only Series and DataFrame are allowed."
     )
 
-# %% ../nbs/00_ids_finder.ipynb 34
+# %% ../nbs/00_ids_finder.ipynb 35
 def calc_candidate_classification_index(candidate, data):
     return calc_classification_index(
         data.sel(time=slice(candidate["d_tstart"], candidate["d_tstop"]))
     )
 
-# %% ../nbs/00_ids_finder.ipynb 35
+# %% ../nbs/00_ids_finder.ipynb 36
 def convert_to_dataframe(
     data: pl.DataFrame, # orignal Dataframe
 ):
@@ -571,7 +563,7 @@ def convert_to_dataframe(
         data = pd.DataFrame(data)
     return data
 
-# %% ../nbs/00_ids_finder.ipynb 36
+# %% ../nbs/00_ids_finder.ipynb 37
 #| code-summary: Pipelines Class for processing IDs
 class IDsPipeline:
     def __init__(self):
@@ -586,7 +578,7 @@ class IDsPipeline:
             pdp.ApplyToRows(
                 lambda candidate: calc_candidate_d_duration(candidate, sat_fgm),
                 func_desc="calculating duration parameters if needed"
-            ),
+            )
         ])
 
     def calibrate_duration(self, sat_fgm, data_resolution):
@@ -626,14 +618,13 @@ class IDsPipeline:
     # fmt: on
     # ... you can add more methods as needed
 
-# %% ../nbs/00_ids_finder.ipynb 37
+# %% ../nbs/00_ids_finder.ipynb 38
 def process_candidates(
-    candidates: pl.DataFrame, 
-    sat_fgm: xr.DataArray, 
+    candidates: pl.DataFrame,
+    sat_fgm: xr.DataArray,
     sat_state: xr.DataArray,
-    data_resolution: timedelta
+    data_resolution: timedelta,
 ):
-    
     id_pipelines = IDsPipeline()
 
     candidates = id_pipelines.calc_duration(sat_fgm).apply(candidates)
@@ -641,18 +632,21 @@ def process_candidates(
     # calibrate duration
     temp_candidates = candidates.loc[
         lambda df: df["d_tstart"].isnull() | df["d_tstop"].isnull()
-    ]
+    ]  # temp_candidates = candidates.query('d_tstart.isnull() | d_tstop.isnull()') # not implemented in `modin`
+
     if not temp_candidates.empty:
         candidates.update(
-            id_pipelines.calibrate_duration(sat_fgm, data_resolution).apply(temp_candidates)
+            id_pipelines.calibrate_duration(sat_fgm, data_resolution).apply(
+                temp_candidates
+            )
         )
 
-    candidates = candidates.dropna()  # Remove candidates with NaN values
-    
     ids = (
-        id_pipelines.classify_id(sat_fgm) + 
-        id_pipelines.calc_rotation_angle(sat_fgm) +
-        id_pipelines.assign_coordinates(sat_state)
-    ).apply(candidates)
+        id_pipelines.classify_id(sat_fgm)
+        + id_pipelines.calc_rotation_angle(sat_fgm)
+        + id_pipelines.assign_coordinates(sat_state)
+    ).apply(
+        candidates.dropna()  # Remove candidates with NaN values)
+    )
 
     return ids
