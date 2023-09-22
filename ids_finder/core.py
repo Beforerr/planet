@@ -357,7 +357,6 @@ dBOverB_ED_upper_threshold = dBOverB_TD_lower_threshold
 BnOverB_ND_lower_threshold = BnOverB_TD_upper_threshold
 dBOverB_ND_lower_threshold = dBOverB_RD_upper_threshold
 
-
 # %% ../nbs/00_ids_finder.ipynb 23
 from pyspedas.cotrans.minvar import minvar
 
@@ -422,7 +421,6 @@ def classify_id(BnOverB, dBOverB):
     result[ND] = "ND"
 
     return result
-
 
 # %% ../nbs/00_ids_finder.ipynb 27
 def calc_rotation_angle(v1, v2):
@@ -502,7 +500,6 @@ def get_ID_filter_condition(
             pl.col("count") > sparse_num
         )  # filter out sparse intervals, which may give unreasonable results.
     )
-
 
 
 # %% ../nbs/00_ids_finder.ipynb 32

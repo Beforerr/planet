@@ -17,8 +17,11 @@ dependencies:
   - flox # fast & furious GroupBy reductions for xarray and dask
   
   - astropy
-  - nbdev
+
   - jupyter
+  - fastai::nbdev
+  - fastai::fastcore
+
   - bokeh<3 # pytplot compatibility
   - seaborn
   - altair
