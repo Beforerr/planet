@@ -6,9 +6,9 @@ channels:
   - conda-forge
 dependencies:
   - pdr # [P]lanetary [D]ata [R]eader - A single function to read all Planetary Data System (PDS) data into Python
+  
   - pandas
   - pdpipe
-  
   - xarray
   # For accelerating xarray
   - scipy
@@ -39,3 +39,4 @@ dependencies:
     - polars
     - pyspedas @ git+https://github.com/spedas/pyspedas
     - xarray-einstats
+    - nltk

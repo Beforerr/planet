@@ -21,6 +21,7 @@ import xarray as xr
 
 try:
     import modin.pandas as pd
+    import modin.pandas as mpd
     from modin.config import ProgressBar
     ProgressBar.enable()
 except ImportError:
@@ -41,11 +42,7 @@ from pytplot import timebar, store_data, tplot, split_vec, join_vec, tplot_optio
 import pdpipe as pdp
 from multipledispatch import dispatch
 
-from collections.abc import Callable
-from pandas import (
-    DataFrame,
-    Timestamp,
-)
+
 from xarray.core.dataarray import DataArray
 
 # %% ../nbs/00_ids_finder.ipynb 10
@@ -76,7 +73,7 @@ def get_candidate_data(candidate, data, coord:str=None, neighbor:int=0) -> xr.Da
     
     return df2ts(temp_data, ["BX", "BY", "BZ"], attrs={"coordinate_system": coord, "units": "nT"})
 
-def get_candidates(candidates: DataFrame, candidate_type=None, num:int=4):
+def get_candidates(candidates: pd.DataFrame, candidate_type=None, num:int=4):
     
     if candidate_type is not None:
         _candidates = candidates[candidates['type'] == candidate_type]
@@ -91,12 +88,16 @@ def get_candidates(candidates: DataFrame, candidate_type=None, num:int=4):
         return _candidates
 
 # %% ../nbs/00_ids_finder.ipynb 12
-from pyspedas.cotrans import minvar_matrix_make
+from pyspedas.cotrans.minvar_matrix_make import minvar_matrix_make
 from pyspedas import tvector_rotate
 
 # %% ../nbs/00_ids_finder.ipynb 13
 def plot_basic(
-    data, tstart, tstop, tau, mva_tstart=None, mva_tstop=None, neighbor: int = 1
+    data: xr.DataArray, 
+    tstart: pd.Timestamp, 
+    tstop: pd.Timestamp,
+    tau: timedelta, 
+    mva_tstart=None, mva_tstop=None, neighbor: int = 1
 ):
     if mva_tstart is None:
         mva_tstart = tstart
@@ -107,8 +108,8 @@ def plot_basic(
     store_data("fgm", data={"x": mva_b.time, "y": mva_b})
     minvar_matrix_make("fgm")  # get the MVA matrix
 
-    temp_tstart = pd.Timestamp(tstart) - pd.Timedelta(neighbor * tau, unit="s")
-    temp_tstop = pd.Timestamp(tstop) + pd.Timedelta(neighbor * tau, unit="s")
+    temp_tstart = tstart - neighbor * tau
+    temp_tstop = tstop + neighbor * tau
 
     temp_b = data.sel(time=slice(temp_tstart, temp_tstop))
     store_data("fgm", data={"x": temp_b.time, "y": temp_b})
@@ -149,7 +150,7 @@ def format_candidate_title(candidate: pandas.Series):
     return title
 
 
-def plot_candidate(candidate: pandas.Series):
+def plot_candidate(candidate: pandas.Series, sat_fgm: xr.DataArray, tau: timedelta):
     if pd.notnull(candidate.get("d_tstart")) and pd.notnull(candidate.get("d_tstop")):
         plot_basic(
             sat_fgm,
@@ -189,6 +190,7 @@ def plot_candidates(
     """
 
     # Filter by candidate_type if provided
+    
     candidates = get_candidates(candidates, candidate_type, num)
 
     # Plot each candidate using the provided plotting function
@@ -225,8 +227,7 @@ def calc_duration(vec: xr.DataArray, threshold_ratio=THRESHOLD_RATIO) -> pandas.
         'd_tstop': end_time,
     }
 
-    return dict
-    # return pandas.Series(dict)
+    return pandas.Series(dict)
 
 def calc_d_duration(vec: xr.DataArray, d_time, threshold) -> pd.Series:
     vec_diff = vec.differentiate("time", datetime_unit="s")
@@ -480,7 +481,7 @@ def calc_candidate_rotation_angle(candidates, data:  xr.DataArray):
 
 # %% ../nbs/00_ids_finder.ipynb 29
 def get_candidate_location(candidate, location_data: DataArray):
-    return location_data.sel(time = candidate['d_time']).to_series()
+    return location_data.sel(time = candidate['d_time'], method="nearest").to_series()
 
 # %% ../nbs/00_ids_finder.ipynb 31
 def get_ID_filter_condition(
@@ -550,7 +551,7 @@ def calc_candidate_classification_index(candidate, data):
 # %% ../nbs/00_ids_finder.ipynb 35
 def convert_to_dataframe(
     data: pl.DataFrame, # orignal Dataframe
-):
+)->pd.DataFrame:
     "convert data into a pandas/modin DataFrame"
     if isinstance(data, pl.LazyFrame):
         data = data.collect().to_pandas(use_pyarrow_extension_array=True)
@@ -606,7 +607,8 @@ class IDsPipeline:
                 func_desc="calculating rotation angle",
             ) 
 
-    def assign_coordinates(self, sat_state):
+    def assign_coordinates(self, sat_state: xr.DataArray):
+        "NOTE: not optimized, quite slow"
         return \
             pdp.ApplyToRows(
                 lambda candidate: get_candidate_location(candidate, sat_state),
@@ -617,13 +619,12 @@ class IDsPipeline:
 
 # %% ../nbs/00_ids_finder.ipynb 37
 def process_candidates(
-    candidates: pl.DataFrame,
-    sat_fgm: xr.DataArray,
-    sat_state: xr.DataArray,
-    data_resolution: timedelta,
-):
+    candidates: pl.DataFrame,  # potential candidates DataFrame
+    sat_fgm: xr.DataArray,  # satellite FGM data
+    sat_state: pl.DataFrame,  # satellite state data
+    data_resolution: timedelta,  # time resolution of the data
+) -> pl.DataFrame:  # processed candidates DataFrame
     id_pipelines = IDsPipeline()
-
     candidates = id_pipelines.calc_duration(sat_fgm).apply(candidates)
 
     # calibrate duration
@@ -632,18 +633,25 @@ def process_candidates(
     ]  # temp_candidates = candidates.query('d_tstart.isnull() | d_tstop.isnull()') # not implemented in `modin`
 
     if not temp_candidates.empty:
-        candidates.update(
-            id_pipelines.calibrate_duration(sat_fgm, data_resolution).apply(
-                temp_candidates
-            )
-        )
+        temp_candidates_updated = id_pipelines.calibrate_duration(
+            sat_fgm, data_resolution
+        ).apply(temp_candidates)
+        candidates.update(temp_candidates_updated)
 
     ids = (
         id_pipelines.classify_id(sat_fgm)
         + id_pipelines.calc_rotation_angle(sat_fgm)
-        + id_pipelines.assign_coordinates(sat_state)
     ).apply(
         candidates.dropna()  # Remove candidates with NaN values)
     )
 
-    return ids
+    if isinstance(ids, mpd.DataFrame):
+        ids = ids._to_pandas()
+    if isinstance(ids, pandas.DataFrame):
+        ids_pl = pl.DataFrame(ids)
+
+    ids_pl = ids_pl.sort("d_time").join_asof(
+        sat_state, left_on="d_time", right_on="time", strategy="nearest"
+    ).drop("time_right")
+
+    return ids_pl

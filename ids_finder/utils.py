@@ -5,7 +5,7 @@ __all__ = ['download_file', 'check_fgm', 'col_renamer', 'df2ts', 'sat_get_fgm_fr
            'calc_vec_mean_mag', 'calc_vec_std', 'calc_vec_relative_diff', 'pl_format_time', 'pl_norm', 'pl_dvec',
            'compute_std', 'compute_combinded_std', 'compute_index_std', 'compute_index_diff', 'compute_indices']
 
-# %% ../nbs/100_utils.ipynb 2
+# %% ../nbs/100_utils.ipynb 3
 import os
 import requests
 
@@ -25,7 +25,7 @@ from xarray import DataArray
 from typing import Union
 from typing import Any, Collection
 
-# %% ../nbs/100_utils.ipynb 3
+# %% ../nbs/100_utils.ipynb 4
 def download_file(url, local_dir="./", file_name=None):
     """
     Download a file from a URL and save it locally.
@@ -105,7 +105,7 @@ def juno_get_state(df: Union[pandas.DataFrame, pl.DataFrame, pl.LazyFrame]):
 def calc_vec_mag(vec) -> DataArray:
     return linalg.norm(vec, dims="v_dim")
 
-# %% ../nbs/100_utils.ipynb 4
+# %% ../nbs/100_utils.ipynb 5
 def calc_vec_mean_mag(vec: DataArray):
     return linalg.norm(vec, dims="v_dim").mean(dim="time")
 
@@ -176,7 +176,7 @@ def pl_dvec(columns, *more_columns):
     ]
 
 
-# %% ../nbs/100_utils.ipynb 5
+# %% ../nbs/100_utils.ipynb 6
 def compute_std(df: pl.DataFrame, tau) -> pl.DataFrame:
     b_cols = ["BX", "BY", "BZ"]
     b_std_cols = [col_name + "_std" for col_name in b_cols]
@@ -233,7 +233,7 @@ def compute_combinded_std(df: pl.DataFrame, tau) -> pl.DataFrame:
     combined_std_df = pl.concat(combined_std_dfs)
     return combined_std_df
 
-# %% ../nbs/100_utils.ipynb 6
+# %% ../nbs/100_utils.ipynb 7
 @dispatch(xr.DataArray, object)
 def compute_index_std(data: DataArray, tau):
     """
@@ -318,7 +318,7 @@ def compute_index_std(df: pl.LazyFrame, tau, join_strategy="inner"):  # noqa: F8
     )
     return index_std_df
 
-# %% ../nbs/100_utils.ipynb 7
+# %% ../nbs/100_utils.ipynb 8
 def compute_index_diff(df, tau):
     b_cols = ["BX", "BY", "BZ"]
     db_cols = ["d" + col_name + "_vec" for col_name in b_cols]
