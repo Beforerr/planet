@@ -177,13 +177,16 @@ def pl_dvec(columns, *more_columns):
 
 
 # %% ../nbs/100_utils.ipynb 6
-def compute_std(df: pl.DataFrame, tau) -> pl.DataFrame:
+def compute_std(
+    df: pl.DataFrame, 
+    tau) -> pl.DataFrame:
     b_cols = ["BX", "BY", "BZ"]
     b_std_cols = [col_name + "_std" for col_name in b_cols]
 
     std_df = (
         df.group_by_dynamic("time", every=tau / 2, period=tau)
         .agg(
+            pl.count(),
             pl.col(b_cols).std(ddof=0).map_alias(lambda col_name: col_name + "_std"),
         )
         .with_columns(
@@ -234,34 +237,6 @@ def compute_combinded_std(df: pl.DataFrame, tau) -> pl.DataFrame:
     return combined_std_df
 
 # %% ../nbs/100_utils.ipynb 7
-@dispatch(xr.DataArray, object)
-def compute_index_std(data: DataArray, tau):
-    """
-    Examples
-    --------
-    >>> i1 = index_std(juno_fgm_b, tau)
-    """
-
-    # NOTE: large tau values will speed up the computation
-
-    # Resample the data based on the provided time interval.
-    grouped_data = data.resample(time=pandas.Timedelta(tau, unit="s"))
-
-    # Compute the standard deviation for all groups
-    vec_stds = linalg.norm(grouped_data.std(dim="time"), dims="v_dim")
-    # vec_stds = grouped_data.map(calc_vec_std) # NOTE: This is way much slower (like 30x slower)
-
-    offset = pandas.Timedelta(tau / 2, unit="s")
-    vec_stds["time"] = vec_stds["time"] + offset
-
-    vec_stds_next = vec_stds.assign_coords(
-        {"time": vec_stds["time"] - pandas.Timedelta(tau, unit="s")}
-    )
-    vec_stds_previous = vec_stds.assign_coords(
-        {"time": vec_stds["time"] + pandas.Timedelta(tau, unit="s")}
-    )
-    return np.minimum(vec_stds / vec_stds_next, vec_stds / vec_stds_previous)
-
 @dispatch(pl.LazyFrame, object)
 def compute_index_std(df: pl.LazyFrame, tau, join_strategy="inner"):  # noqa: F811
     """
@@ -299,12 +274,14 @@ def compute_index_std(df: pl.LazyFrame, tau, join_strategy="inner"):  # noqa: F8
     # Calculate the standard deviation index
     prev_std_df = std_df.select(
         (pl.col("time") + tau).dt.cast_time_unit("ns"),
-        (pl.col("B_std")).alias("B_std_prev"),
+        pl.col("B_std").alias("B_std_prev"),
+        pl.col("count").alias("count_prev"),
     )
 
     next_std_df = std_df.select(
         (pl.col("time") - tau).dt.cast_time_unit("ns"),
-        (pl.col("B_std")).alias("B_std_next"),
+        pl.col("B_std").alias("B_std_next"),
+        pl.col("count").alias("count_next")
     )
 
     index_std_df = (
@@ -327,7 +304,6 @@ def compute_index_diff(df, tau):
         df.with_columns(pl_norm(b_cols).alias("B"))
         .group_by_dynamic("time", every=tau / 2, period=tau)
         .agg(
-            pl.count(),
             pl.col("B").mean().alias("B_mean"),
             *pl_dvec(b_cols),
         )
@@ -345,39 +321,8 @@ def compute_index_diff(df, tau):
 @dispatch(pl.LazyFrame, timedelta)
 def compute_indices(
     df: pl.LazyFrame, 
-    tau
-) -> pl.LazyFrame:
-    join_strategy = "inner"
-    std_df = compute_std(df, tau)
-    combined_std_df = compute_combinded_std(df, tau)
-
-    index_std = compute_index_std(std_df, tau)
-    index_diff = compute_index_diff(df, tau)
-
-    indices = (
-        index_std.join(index_diff, on="time")
-        .join(combined_std_df, on="time", how=join_strategy)
-        .with_columns(
-            pl.sum_horizontal("B_std_prev", "B_std_next").alias("B_added_std"),
-        )
-        .with_columns(
-            (pl.col("B_std") / (pl.max_horizontal("B_std_prev", "B_std_next"))).alias(
-                "index_std"
-            ),
-            (pl.col("B_combined_std") / pl.col("B_added_std")).alias(
-                "index_fluctuation"
-            ),
-        )
-    )
-
-    return indices
-
-
-@dispatch(pl.DataFrame, timedelta)
-def compute_indices(    # noqa: F811
-    df: pl.DataFrame, 
     tau: timedelta,
-) -> pl.LazyFrame | pl.DataFrame:  
+) -> pl.LazyFrame:
     """
     Compute all index based on the given DataFrame and tau value.
 
@@ -409,6 +354,41 @@ def compute_indices(    # noqa: F811
     - TODO: Can be optimized further, but this is already fast enough.
         - TEST: if `join` can be improved by shift after filling the missing values.
         - TEST: if `list` in `polars` really fast?
+    """
+    join_strategy = "inner"
+    
+    std_df = compute_std(df, tau)
+    combined_std_df = compute_combinded_std(df, tau)
+
+    index_std = compute_index_std(std_df, tau)
+    index_diff = compute_index_diff(df, tau)
+
+    indices = (
+        index_std.join(index_diff, on="time")
+        .join(combined_std_df, on="time", how=join_strategy)
+        .with_columns(
+            pl.sum_horizontal("B_std_prev", "B_std_next").alias("B_added_std"),
+        )
+        .with_columns(
+            (pl.col("B_std") / (pl.max_horizontal("B_std_prev", "B_std_next"))).alias(
+                "index_std"
+            ),
+            (pl.col("B_combined_std") / pl.col("B_added_std")).alias(
+                "index_fluctuation"
+            ),
+        )
+    )
+
+    return indices
+
+
+@dispatch(pl.DataFrame, timedelta)
+def compute_indices(    # noqa: F811
+    df: pl.DataFrame, 
+    tau: timedelta,
+) -> pl.DataFrame:
+    """
+    wrapper for `compute_indices` with `pl.LazyFrame` input.
     """
     return compute_indices(df.lazy(), tau).collect()
 

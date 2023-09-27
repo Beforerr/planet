@@ -4,11 +4,12 @@
 __all__ = ['THRESHOLD_RATIO', 'BnOverB_RD_lower_threshold', 'dBOverB_RD_upper_threshold', 'BnOverB_TD_upper_threshold',
            'dBOverB_TD_lower_threshold', 'BnOverB_ED_upper_threshold', 'dBOverB_ED_upper_threshold',
            'BnOverB_ND_lower_threshold', 'dBOverB_ND_lower_threshold', 'get_candidate_data', 'get_candidates',
-           'plot_basic', 'format_candidate_title', 'plot_candidate', 'plot_candidates', 'calc_duration',
+           'time_stamp', 'plot_basic', 'format_candidate_title', 'plot_candidate', 'plot_candidates', 'calc_duration',
            'calc_d_duration', 'find_start_end_times', 'get_time_from_condition', 'calc_candidate_duration',
            'calc_candidate_d_duration', 'calibrate_candidate_duration', 'calc_classification_index', 'classify_id',
            'calc_rotation_angle', 'calc_candidate_rotation_angle', 'get_candidate_location', 'get_ID_filter_condition',
-           'calc_candidate_classification_index', 'convert_to_dataframe', 'IDsPipeline', 'process_candidates']
+           'calc_candidate_classification_index', 'convert_to_dataframe', 'IDsPipeline', 'process_candidates',
+           'CandidateID']
 
 # %% ../nbs/00_ids_finder.ipynb 3
 #| code-summary: import all the packages needed for the project
@@ -16,7 +17,6 @@ from fastcore.utils import *
 from fastcore.test import *
 from .utils import *
 import polars as pl
-import polars.selectors as cs
 import xarray as xr
 
 try:
@@ -37,7 +37,6 @@ from datetime import timedelta
 from loguru import logger
 
 import pytplot
-from pytplot import timebar, store_data, tplot, split_vec, join_vec, tplot_options, options, highlight, degap
 
 import pdpipe as pdp
 from multipledispatch import dispatch
@@ -88,10 +87,16 @@ def get_candidates(candidates: pd.DataFrame, candidate_type=None, num:int=4):
         return _candidates
 
 # %% ../nbs/00_ids_finder.ipynb 12
+from zoneinfo import ZoneInfo
 from pyspedas.cotrans.minvar_matrix_make import minvar_matrix_make
 from pyspedas import tvector_rotate
+from pytplot import timebar, store_data, tplot, split_vec, join_vec, tplot_options, options, highlight, degap
 
 # %% ../nbs/00_ids_finder.ipynb 13
+def time_stamp(ts):
+    "Return POSIX timestamp as float."
+    return pd.Timestamp(ts, tz="UTC").timestamp()
+
 def plot_basic(
     data: xr.DataArray, 
     tstart: pd.Timestamp, 
@@ -134,7 +139,11 @@ def plot_basic(
     options("fgm", "legend_names", [r"$B_x$", r"$B_y$", r"$B_z$"])
     options("fgm_all", "legend_names", [r"$B_l$", r"$B_m$", r"$B_n$", r"$B_{total}$"])
     options("fgm_all", "ysubtitle", "[nT LMN]")
-    highlight(["fgm", "fgm_all"], [tstart.timestamp(), tstop.timestamp()])
+    tstart_ts = time_stamp(tstart)
+    tstop_ts = time_stamp(tstop)
+    # .replace(tzinfo=ZoneInfo('UTC')).timestamp()
+    highlight(["fgm", "fgm_all"], [tstart_ts, tstop_ts])
+    
     degap("fgm")
     degap("fgm_all")
 
@@ -166,11 +175,14 @@ def plot_candidate(candidate: pandas.Series, sat_fgm: xr.DataArray, tau: timedel
     tplot_options("title", format_candidate_title(candidate))
 
     if "d_time" in candidate.keys():
-        timebar(candidate["d_time"].timestamp(), color="red")
+        d_time_ts = time_stamp(candidate["d_time"])
+        timebar(d_time_ts, color="red")
     if "d_tstart" in candidate.keys() and not pd.isnull(candidate["d_tstart"]):
-        timebar(candidate["d_tstart"].timestamp())
+        d_start_ts = time_stamp(candidate["d_tstart"])
+        timebar(d_start_ts)
     if "d_tstop" in candidate.keys() and not pd.isnull(candidate["d_tstop"]):
-        timebar(candidate["d_tstop"].timestamp())
+        d_stop_ts = time_stamp(candidate["d_tstop"])
+        timebar(d_stop_ts)
 
     # tplot(['fgm','fgm_all'])
     tplot("fgm_all")
@@ -500,6 +512,12 @@ def get_ID_filter_condition(
         & (
             pl.col("count") > sparse_num
         )  # filter out sparse intervals, which may give unreasonable results.
+        & (
+            pl.col("count_prev") > sparse_num
+        ) 
+        & (
+            pl.col("count_next") > sparse_num
+        )
     )
 
 
@@ -655,3 +673,31 @@ def process_candidates(
     ).drop("time_right")
 
     return ids_pl
+
+# %% ../nbs/00_ids_finder.ipynb 39
+from pprint import pprint
+
+# %% ../nbs/00_ids_finder.ipynb 40
+class CandidateID:
+    def __init__(self, time, df: pl.DataFrame) -> None:
+        self.time = pd.Timestamp(time)
+        self.data = df.row(
+            by_predicate=(pl.col("time") == self.time), 
+            named=True
+        )
+
+    def __repr__(self) -> str:
+        # return self.data.__repr__()
+        pprint(self.data)
+        return ''
+    
+    def calc_duration(self, sat_fgm):
+        return calc_candidate_duration(self.data, sat_fgm)
+    
+    def calc_d_duration(self, sat_fgm):
+        return calc_candidate_d_duration(self.data, sat_fgm)
+    
+    def plot(self, sat_fgm, tau):
+        plot_candidate(self.data, sat_fgm, tau)
+        pass
+        
