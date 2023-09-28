@@ -4,4 +4,5 @@ website:
       - index.ipynb
       - 00_ids_finder.ipynb
       - 01_juno.ipynb
+      - 02_themis.ipynb
       - 100_utils.ipynb
