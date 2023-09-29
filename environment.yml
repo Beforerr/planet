@@ -40,3 +40,4 @@ dependencies:
     - pyspedas @ git+https://github.com/spedas/pyspedas
     - xarray-einstats
     - nltk
+    - humanize
