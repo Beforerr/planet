@@ -5,4 +5,5 @@ website:
       - 00_ids_finder.ipynb
       - 01_juno.ipynb
       - 02_themis.ipynb
+      - 03_stereo.ipynb
       - 100_utils.ipynb

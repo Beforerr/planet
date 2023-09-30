@@ -8,10 +8,13 @@ __all__ = ['THRESHOLD_RATIO', 'BnOverB_RD_lower_threshold', 'dBOverB_RD_upper_th
            'calc_d_duration', 'find_start_end_times', 'get_time_from_condition', 'calc_candidate_duration',
            'calc_candidate_d_duration', 'calibrate_candidate_duration', 'calc_classification_index', 'classify_id',
            'calc_rotation_angle', 'calc_candidate_rotation_angle', 'get_candidate_location', 'get_ID_filter_condition',
-           'calc_candidate_classification_index', 'convert_to_dataframe', 'IDsPipeline', 'process_candidates',
-           'CandidateID']
+           'calc_candidate_classification_index', 'convert_to_dataframe', 'IDsPipeline', 'sort_df',
+           'process_candidates', 'CandidateID']
 
 # %% ../nbs/00_ids_finder.ipynb 3
+#| code-summary: import all the packages needed for the project
+#| code-summary: import all the packages needed for the project
+#| code-summary: import all the packages needed for the project
 #| code-summary: import all the packages needed for the project
 from fastcore.utils import *
 from fastcore.test import *
@@ -526,6 +529,9 @@ from pdpipe.util import out_of_place_col_insert
 
 # %% ../nbs/00_ids_finder.ipynb 33
 #| code-summary: patch `pdp.ApplyToRows` to work with `modin` DataFrames
+#| code-summary: patch `pdp.ApplyToRows` to work with `modin` DataFrames
+#| code-summary: patch `pdp.ApplyToRows` to work with `modin` DataFrames
+#| code-summary: patch `pdp.ApplyToRows` to work with `modin` DataFrames
 @patch
 def _transform(self: pdp.ApplyToRows, X, verbose):
     new_cols = X.apply(self._func, axis=1)
@@ -580,6 +586,9 @@ def convert_to_dataframe(
     return data
 
 # %% ../nbs/00_ids_finder.ipynb 36
+#| code-summary: Pipelines Class for processing IDs
+#| code-summary: Pipelines Class for processing IDs
+#| code-summary: Pipelines Class for processing IDs
 #| code-summary: Pipelines Class for processing IDs
 class IDsPipeline:
     def __init__(self):
@@ -636,12 +645,22 @@ class IDsPipeline:
     # ... you can add more methods as needed
 
 # %% ../nbs/00_ids_finder.ipynb 37
+def sort_df(df: pl.DataFrame, col='time'):
+    if df.get_column(col).is_sorted():
+        return df.set_sorted(col)
+    else:
+        return df.sort(col)
+
 def process_candidates(
-    candidates: pl.DataFrame,  # potential candidates DataFrame
+    candidates_pl: pl.DataFrame,  # potential candidates DataFrame
     sat_fgm: xr.DataArray,  # satellite FGM data
     sat_state: pl.DataFrame,  # satellite state data
     data_resolution: timedelta,  # time resolution of the data
 ) -> pl.DataFrame:  # processed candidates DataFrame
+    
+    test_eq(sat_fgm.shape[1],3)
+    candidates = convert_to_dataframe(candidates_pl)
+    
     id_pipelines = IDsPipeline()
     candidates = id_pipelines.calc_duration(sat_fgm).apply(candidates)
 
@@ -668,7 +687,10 @@ def process_candidates(
     if isinstance(ids, pandas.DataFrame):
         ids_pl = pl.DataFrame(ids)
 
-    ids_pl = ids_pl.sort("d_time").join_asof(
+    ids_pl = sort_df(ids_pl, col="d_time")
+    sat_state = sort_df(sat_state, col="time")
+    
+    ids_pl = ids_pl.join_asof(
         sat_state, left_on="d_time", right_on="time", strategy="nearest"
     ).drop("time_right")
 
