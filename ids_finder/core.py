@@ -9,18 +9,16 @@ __all__ = ['THRESHOLD_RATIO', 'BnOverB_RD_lower_threshold', 'dBOverB_RD_upper_th
            'calc_candidate_d_duration', 'calibrate_candidate_duration', 'calc_classification_index', 'classify_id',
            'calc_rotation_angle', 'calc_candidate_rotation_angle', 'get_candidate_location', 'get_ID_filter_condition',
            'calc_candidate_classification_index', 'convert_to_dataframe', 'IDsPipeline', 'sort_df',
-           'process_candidates', 'CandidateID']
+           'process_candidates', 'CandidateID', 'compress_data_by_cands']
 
 # %% ../nbs/00_ids_finder.ipynb 3
-#| code-summary: import all the packages needed for the project
-#| code-summary: import all the packages needed for the project
-#| code-summary: import all the packages needed for the project
-#| code-summary: import all the packages needed for the project
+#| code-summary: "Import all the packages needed for the project"
 from fastcore.utils import *
 from fastcore.test import *
 from .utils import *
 import polars as pl
 import xarray as xr
+
 
 try:
     import modin.pandas as pd
@@ -29,7 +27,6 @@ try:
     ProgressBar.enable()
 except ImportError:
     import pandas as pd
-
 import pandas
     
 import numpy as np
@@ -47,7 +44,7 @@ from multipledispatch import dispatch
 
 from xarray.core.dataarray import DataArray
 
-# %% ../nbs/00_ids_finder.ipynb 10
+# %% ../nbs/00_ids_finder.ipynb 11
 @dispatch(object, xr.DataArray)
 def get_candidate_data(candidate, data, coord:str=None, neighbor:int=0) -> xr.DataArray:
     duration = candidate['tstop'] - candidate['tstart']
@@ -89,13 +86,13 @@ def get_candidates(candidates: pd.DataFrame, candidate_type=None, num:int=4):
     else:
         return _candidates
 
-# %% ../nbs/00_ids_finder.ipynb 12
+# %% ../nbs/00_ids_finder.ipynb 13
 from zoneinfo import ZoneInfo
 from pyspedas.cotrans.minvar_matrix_make import minvar_matrix_make
 from pyspedas import tvector_rotate
 from pytplot import timebar, store_data, tplot, split_vec, join_vec, tplot_options, options, highlight, degap
 
-# %% ../nbs/00_ids_finder.ipynb 13
+# %% ../nbs/00_ids_finder.ipynb 14
 def time_stamp(ts):
     "Return POSIX timestamp as float."
     return pd.Timestamp(ts, tz="UTC").timestamp()
@@ -212,7 +209,7 @@ def plot_candidates(
     for _, candidate in candidates.iterrows():
         plot_func(candidate)
 
-# %% ../nbs/00_ids_finder.ipynb 17
+# %% ../nbs/00_ids_finder.ipynb 18
 THRESHOLD_RATIO  = 1/4
 
 from typing import Tuple
@@ -283,7 +280,7 @@ def get_time_from_condition(vec: xr.DataArray, threshold, condition_type) -> pd.
         return vec.time[where_result[index_choice]].values
     return None
 
-# %% ../nbs/00_ids_finder.ipynb 18
+# %% ../nbs/00_ids_finder.ipynb 19
 def calc_candidate_duration(candidate: pd.Series, data) -> pd.Series:
     try:
         candidate_data = get_candidate_data(candidate, data)
@@ -310,7 +307,7 @@ def calc_candidate_d_duration(candidate, data) -> pd.Series:
         print(f"Error for candidate {candidate} at {candidate['time']}: {str(e)}")
         raise e
 
-# %% ../nbs/00_ids_finder.ipynb 19
+# %% ../nbs/00_ids_finder.ipynb 20
 def calibrate_candidate_duration(
     candidate: pd.Series, data:xr.DataArray, data_resolution, ratio = 3/4
 ):
@@ -360,7 +357,7 @@ def calibrate_candidate_duration(
         'd_tstop': d_tstop,
     })
 
-# %% ../nbs/00_ids_finder.ipynb 22
+# %% ../nbs/00_ids_finder.ipynb 23
 BnOverB_RD_lower_threshold = 0.4
 dBOverB_RD_upper_threshold = 0.2
 
@@ -373,10 +370,10 @@ dBOverB_ED_upper_threshold = dBOverB_TD_lower_threshold
 BnOverB_ND_lower_threshold = BnOverB_TD_upper_threshold
 dBOverB_ND_lower_threshold = dBOverB_RD_upper_threshold
 
-# %% ../nbs/00_ids_finder.ipynb 23
+# %% ../nbs/00_ids_finder.ipynb 24
 from pyspedas.cotrans.minvar import minvar
 
-# %% ../nbs/00_ids_finder.ipynb 24
+# %% ../nbs/00_ids_finder.ipynb 25
 def calc_classification_index(data: xr.DataArray):
     
     vrot, v, w = minvar(data.to_numpy()) # NOTE: using `.to_numpy()` will significantly speed up the computation.
@@ -413,7 +410,7 @@ def calc_classification_index(data: xr.DataArray):
         'dBOverB_max': dBOverB_max.item(),
         })
 
-# %% ../nbs/00_ids_finder.ipynb 25
+# %% ../nbs/00_ids_finder.ipynb 26
 def classify_id(BnOverB, dBOverB):
     BnOverB = np.abs(np.asarray(BnOverB))
     dBOverB = np.asarray(dBOverB)
@@ -438,7 +435,7 @@ def classify_id(BnOverB, dBOverB):
 
     return result
 
-# %% ../nbs/00_ids_finder.ipynb 27
+# %% ../nbs/00_ids_finder.ipynb 28
 def calc_rotation_angle(v1, v2):
     """
     Computes the rotation angle between two vectors.
@@ -494,11 +491,11 @@ def calc_candidate_rotation_angle(candidates, data:  xr.DataArray):
     rotation_angles = calc_rotation_angle(vecs_before, vecs_after)
     return rotation_angles
 
-# %% ../nbs/00_ids_finder.ipynb 29
+# %% ../nbs/00_ids_finder.ipynb 30
 def get_candidate_location(candidate, location_data: DataArray):
     return location_data.sel(time = candidate['d_time'], method="nearest").to_series()
 
-# %% ../nbs/00_ids_finder.ipynb 31
+# %% ../nbs/00_ids_finder.ipynb 32
 def get_ID_filter_condition(
     index_std_threshold = 2,
     index_fluc_threshold = 1,
@@ -524,14 +521,10 @@ def get_ID_filter_condition(
     )
 
 
-# %% ../nbs/00_ids_finder.ipynb 32
+# %% ../nbs/00_ids_finder.ipynb 33
 from pdpipe.util import out_of_place_col_insert
 
-# %% ../nbs/00_ids_finder.ipynb 33
-#| code-summary: patch `pdp.ApplyToRows` to work with `modin` DataFrames
-#| code-summary: patch `pdp.ApplyToRows` to work with `modin` DataFrames
-#| code-summary: patch `pdp.ApplyToRows` to work with `modin` DataFrames
-#| code-summary: patch `pdp.ApplyToRows` to work with `modin` DataFrames
+# %% ../nbs/00_ids_finder.ipynb 35
 @patch
 def _transform(self: pdp.ApplyToRows, X, verbose):
     new_cols = X.apply(self._func, axis=1)
@@ -542,7 +535,7 @@ def _transform(self: pdp.ApplyToRows, X, verbose):
         return out_of_place_col_insert(
             X=X, series=new_cols, loc=loc, column_name=self._colname
         )
-    if isinstance(new_cols, (pd.DataFrame, pandas.DataFrame)):
+    if isinstance(new_cols, (xpd.DataFrame, mpd.DataFrame, pandas.DataFrame)):
         sorted_cols = sorted(list(new_cols.columns))
         new_cols = new_cols[sorted_cols]
         if self._follow_column:
@@ -566,13 +559,13 @@ def _transform(self: pdp.ApplyToRows, X, verbose):
         " Only Series and DataFrame are allowed."
     )
 
-# %% ../nbs/00_ids_finder.ipynb 34
+# %% ../nbs/00_ids_finder.ipynb 36
 def calc_candidate_classification_index(candidate, data):
     return calc_classification_index(
         data.sel(time=slice(candidate["d_tstart"], candidate["d_tstop"]))
     )
 
-# %% ../nbs/00_ids_finder.ipynb 35
+# %% ../nbs/00_ids_finder.ipynb 37
 def convert_to_dataframe(
     data: pl.DataFrame, # orignal Dataframe
 )->pd.DataFrame:
@@ -585,11 +578,7 @@ def convert_to_dataframe(
         data = pd.DataFrame(data)
     return data
 
-# %% ../nbs/00_ids_finder.ipynb 36
-#| code-summary: Pipelines Class for processing IDs
-#| code-summary: Pipelines Class for processing IDs
-#| code-summary: Pipelines Class for processing IDs
-#| code-summary: Pipelines Class for processing IDs
+# %% ../nbs/00_ids_finder.ipynb 39
 class IDsPipeline:
     def __init__(self):
         pass
@@ -644,7 +633,7 @@ class IDsPipeline:
     # fmt: on
     # ... you can add more methods as needed
 
-# %% ../nbs/00_ids_finder.ipynb 37
+# %% ../nbs/00_ids_finder.ipynb 40
 def sort_df(df: pl.DataFrame, col='time'):
     if df.get_column(col).is_sorted():
         return df.set_sorted(col)
@@ -696,10 +685,10 @@ def process_candidates(
 
     return ids_pl
 
-# %% ../nbs/00_ids_finder.ipynb 39
+# %% ../nbs/00_ids_finder.ipynb 42
 from pprint import pprint
 
-# %% ../nbs/00_ids_finder.ipynb 40
+# %% ../nbs/00_ids_finder.ipynb 43
 class CandidateID:
     def __init__(self, time, df: pl.DataFrame) -> None:
         self.time = pd.Timestamp(time)
@@ -723,3 +712,23 @@ class CandidateID:
         plot_candidate(self.data, sat_fgm, tau)
         pass
         
+
+# %% ../nbs/00_ids_finder.ipynb 45
+def compress_data_by_cands(data: pl.DataFrame, candidates: pl.DataFrame, tau: timedelta):
+    """Compress the data for parallel processing
+    """
+    ttstarts = candidates['tstart'] - tau
+    ttstops = candidates['tstop'] + tau
+
+    ttstarts_index = data['time'].search_sorted(ttstarts)
+    ttstops_index = data['time'].search_sorted(ttstops)
+    
+    indices = np.concatenate([np.arange(ttstart_index, ttstop_index+1) for ttstart_index, ttstop_index in zip(ttstarts_index, ttstops_index)]) # faster than `pl.arange`
+    indices_unique = pl.Series(indices).unique().sort() # faster than `np.unique(index)`
+    return data[indices_unique]
+
+# data.filter(
+#     pl.any_horizontal(
+#         pl.col('time').is_between(*ttrange) for ttrange in ttranges
+#     )
+# )
