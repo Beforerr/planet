@@ -8,7 +8,11 @@ dependencies:
   - pdr # [P]lanetary [D]ata [R]eader - A single function to read all Planetary Data System (PDS) data into Python
   
   - pandas
+  # - modin-ray # not working on Apple Silicon
   - pdpipe
+  - ydata-profiling
+  - matplotlib<=3.7.3 # compatibility with `ydata-profiling`
+
   - xarray
   # For accelerating xarray
   - scipy
@@ -28,6 +32,7 @@ dependencies:
   - loguru
   - tqdm
   - grpcio # used in `modin`, using conda for (Apple Silicon) Support
+  - pytables # used in `pyspedas`
   - pip
   - pip:
     - modin[ray]
@@ -41,3 +46,5 @@ dependencies:
     - xarray-einstats
     - nltk
     - humanize
+    - rpy2
+    - rpy2-arrow
