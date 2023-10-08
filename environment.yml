@@ -6,6 +6,7 @@ channels:
   - conda-forge
 dependencies:
   - pdr # [P]lanetary [D]ata [R]eader - A single function to read all Planetary Data System (PDS) data into Python
+  - intake
   
   - pandas
   # - modin-ray # not working on Apple Silicon
@@ -25,6 +26,7 @@ dependencies:
   - jupyter
   - fastai::nbdev
   - fastai::fastcore
+  - fastai::fastdownload
 
   - bokeh<3 # pytplot compatibility
   - seaborn
